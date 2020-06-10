@@ -1,4 +1,5 @@
-import * as functions from 'firebase-functions';
+import * as functions from "firebase-functions";
+import * as admin from "firebase-admin";
 import request, {
     RequestPromiseOptions
 } from "request-promise";
@@ -51,10 +52,20 @@ async function sendNotification(newArticle: string): Promise<void> {
 
 export const monitorDmv = functions.pubsub.schedule("every 5 minutes").onRun(
     async (_context) => {
+        admin.initializeApp();
+        const db = admin.firestore();
+        const latest = db.collection("pressReleases").doc("latest")
         const page = await getDmvPage()
         const releases = await getDmvUpdates(page)
-        if (releases[0] !== "DMV Reopens Remaining Field Offices to Public (June 9, 2021)") {
-            await sendNotification(releases[0]);
+        const retrieved = await latest.get()
+        if (retrieved.exists) {
+            const data = retrieved.data()
+            if (data !== undefined && data.latest[0] !== releases[0]) {
+                await sendNotification(releases[0]);
+                await latest.set({"latest": releases});
+            }
+        } else {
+            await latest.set({"latest": releases});
         }
     }
 )
